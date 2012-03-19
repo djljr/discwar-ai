@@ -10,7 +10,7 @@
    :body (json/generate-string data)})
 
 (defn gen-response [r theta]
-  {:r r :theta theta})
+  {:r r :th theta})
 
 (defn aggressive-ai [me all]
   ;(prn "me: " me " all: " all " me.x: " (get me "x") " keys: " (keys me)))
@@ -18,8 +18,8 @@
 
 (defroutes handler
   (POST "/" {params :params}
-    (json-response (gen-response 1 90))))
-    ;(json-response (aggressive-ai me all))))
+    ;(json-response (gen-response 1 0))))
+    (json-response (aggressive-ai (get params "me") (get params "all")))))
 
 (def app
   (-> handler
