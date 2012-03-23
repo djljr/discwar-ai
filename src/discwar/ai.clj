@@ -13,43 +13,53 @@
    :body (json/generate-string data)})
 
 (defn gen-response [r theta]
-  (info (str "r: " r ", theta: " theta))
   {:r r :th theta})
 
-(defn find-opponent [all]
-  (first (filter (fn [x] (= "player0" (get x "type"))) all)))
+(defn opponent-str [me]
+  (if (= me "player0") "player1" "player0"))
 
-(defn get-th [q th]
-  (info q)
-  (- th Math/PI))
+(defn find-opponent [me all]
+  (let [opponent-str (opponent-str (get me "type"))]
+    (first (filter (fn [x] (= opponent-str (get x "type"))) all))))
+
+(defn get-th [q th] 
+  "A wrapper to log before returning the final theta value"
+  th)
 
 (defn angle-between-points [x1 y1 x2 y2]
   (let [dx (- x2 x1)
         dy (- y2 y1)
-        th (+ Math/PI (Math/atan2 dx dy))
+        th (Math/atan2 dy dx)
         pi-over-2 (/ Math/PI 2)
-        three-pi-over-2 (* 3 pi-over-2)]
-    (info "theta: " th)
+        two-pi (* 2 Math/PI)]
     (cond 
       (and (> th 0) (<= th pi-over-2)) (get-th "q1" th)
-      (and (> th pi-over-2) (<= th Math/PI)) (get-th "q2" (- th Math/PI))
-      (and (> th Math/PI) (<= th three-pi-over-2)) (get-th "q3" th)
-      (> th three-pi-over-2) (get-th "q4" (- th Math/PI)))))
+      (and (> th pi-over-2) (<= th Math/PI)) (get-th "q2" th)
+      (and (> th (- 0 Math/PI)) (<= th (- 0 pi-over-2))) (get-th "q3" (+ th two-pi))
+      (and (> th (- 0 pi-over-2)) (<= th 0)) (get-th "q4" (+ th two-pi)))))
+
+(defn power-up-ai [me all]
+  (let [max-acc (get me "maxAcc")]
+  0))
 
 (defn aggressive-ai [me all]
-  (gen-response 0.8 
-    (angle-between-points 
-      (get me "x") 
-      (get me "y") 
-      (get (find-opponent all) "x")
-      (get (find-opponent all) "y"))))
+  (let [max-acc (get me "maxAcc")]
+    (gen-response max-acc
+      (angle-between-points 
+        (get me "x") 
+        (get me "y") 
+        (get (find-opponent me all) "x")
+        (get (find-opponent me all) "y")))))
+
+(defn ai-response [ai params]
+  (let [me (get params "me")
+        all (get params "all")]
+    (ai me all)))
 
 (defroutes handler
   (POST "/" {params :params}
     (json-response 
-      (aggressive-ai 
-        (get params "me") 
-        (get params "all")))))
+      (ai-response aggressive-ai params))))
 
 (def app
   (-> handler
