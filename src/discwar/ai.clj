@@ -70,20 +70,6 @@
       (and (> th (- 0 Math/PI)) (<= th (- 0 pi-over-2))) (get-th "q3" (+ th two-pi))
       (and (> th (- 0 pi-over-2)) (<= th 0)) (get-th "q4" (+ th two-pi)))))
 
-(defn choose-ai [me all settings]
-  (let [max-acc (get me "maxAcc")
-        opponent (find-opponent me all)
-        powerup (find-powerup all)
-        mass-diff (find-mass-diff me opponent)
-        zone-me (compute-zone me settings)
-        zone-opponent (compute-zone opponent settings)]
-    (cond
-      (and (not (= nil powerup)) (= :green (compute-zone powerup settings)) 
-        (or (< mass-diff 1) (and (= :green zone-me) (= :green zone-opponent)))) (powerup-ai me all settings)
-      (< mass-diff -0.6) (center-ai me all settings)
-      (and (= :red zone-me) (not (= :red zone-opponent))) (center-ai me all settings)
-      (and) (aggressive-ai me all settings))))
-
 (defn center-ai [me all settings]
   (let [max-acc (get me "maxAcc")
         v-current (get me "v")
@@ -118,6 +104,20 @@
         y-goal (get opponent "y")
         th-goal (angle-between-points x-me y-me x-goal y-goal)]
     (gen-response max-acc (compute-acceleration-theta max-acc v-th-current th-goal))))
+
+(defn choose-ai [me all settings]
+  (let [max-acc (get me "maxAcc")
+        opponent (find-opponent me all)
+        powerup (find-powerup all)
+        mass-diff (find-mass-diff me opponent)
+        zone-me (compute-zone me settings)
+        zone-opponent (compute-zone opponent settings)]
+    (cond
+      (and (not (= nil powerup)) (= :green (compute-zone powerup settings)) 
+        (or (< mass-diff 1) (and (= :green zone-me) (= :green zone-opponent)))) (powerup-ai me all settings)
+      (< mass-diff -0.6) (center-ai me all settings)
+      (and (= :red zone-me) (not (= :red zone-opponent))) (center-ai me all settings)
+      (and) (aggressive-ai me all settings))))
 
 (defn ai-response [ai params]
   (let [me (get params "me")
