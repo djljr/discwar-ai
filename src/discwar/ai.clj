@@ -23,12 +23,12 @@
         dy (- y2 y1)]
     (Math/sqrt (+ (* dx dx) (* dy dy)))))
 
-(defn filter-type [type coll x-center y-center]
-  (closest-to-center (filter (fn [x] (= type (get x "type"))) coll) x-center y-center))
-
 (defn closest-to-center [coll x-center y-center]
   (first (sort (fn [o1 o2] (- (get o1 "dist") (get o2 "dist")))
     (map (fn [o] (assoc o "dist" (dist(get o "x") (get o "y") x-center y-center))) coll))))
+
+(defn filter-type [type coll x-center y-center]
+  (closest-to-center (filter (fn [x] (= type (get x "type"))) coll) x-center y-center))
 
 (defn find-opponent [me all x-center y-center]
   (let [opponent-str (opponent-str (get me "type"))]
