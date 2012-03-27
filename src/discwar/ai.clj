@@ -1,43 +1,65 @@
 (ns discwar.ai
   (:import org.codehaus.jackson.JsonParseException)
   (:import clojure.contrib.condition.Condition)
+  (:use ring.adapter.jetty)
   (:use compojure.core)
   (:use ring.middleware.json-params)
   (:use ring.middleware.reload)
   (:use clojure.tools.logging)
-  (:require [clj-json.core :as json]))
+  (:require [clj-json.core :as json])
+  (:gen-class))
 
-(defn json-response [data & [status]]
+(defn json-response 
+  "correctly set headers and transform the map provided into JSON"
+  [data & [status]]
   {:status (or status 200)
-   :headers {"Content-Type" "application/json"}
+   :headers {"Content-Type" "application/json"
+             "Access-Control-Allow-Origin" "*"
+             "Access-Control-Allow-Methods" "POST"}
    :body (json/generate-string data)})
 
-(defn gen-response [r theta]
+(defn gen-response 
+  "construct the map used to report desired acceleration"
+  [r theta]
   {:r r :th theta})
 
-(defn opponent-str [me]
+(defn opponent-str 
+  "return the name of the other player"
+  [me]
   (if (= me "player0") "player1" "player0"))
 
-(defn dist [x1 y1 x2 y2]
+(defn dist 
+  "eucledian distance between (x1,y1) and (x2,y2)"
+  [x1 y1 x2 y2]
   (let [dx (- x2 x1)
         dy (- y2 y1)]
     (Math/sqrt (+ (* dx dx) (* dy dy)))))
 
-(defn closest-to-center [coll x-center y-center]
+(defn closest-to-center
+  "returns the item in coll which is closest to (x-center,y-center)"
+  [coll x-center y-center]
   (first (sort (fn [o1 o2] (- (get o1 "dist") (get o2 "dist")))
     (map (fn [o] (assoc o "dist" (dist(get o "x") (get o "y") x-center y-center))) coll))))
 
-(defn filter-type [type coll x-center y-center]
+(defn filter-type 
+  "filter coll to things with the given type and return the one closest to (x-center,y-center)"
+  [type coll x-center y-center]
   (closest-to-center (filter (fn [x] (= type (get x "type"))) coll) x-center y-center))
 
-(defn find-opponent [me all x-center y-center]
+(defn find-opponent 
+  "find the object representing the other player"
+  [me all x-center y-center]
   (let [opponent-str (opponent-str (get me "type"))]
     (filter-type opponent-str all x-center y-center)))
 
-(defn find-powerup [all x-center y-center]
+(defn find-powerup 
+  "find the powerup closest to (x-center,y-center)"
+  [all x-center y-center]
   (filter-type "powerup" all x-center y-center))
 
-(defn is-inside [me opp x-center y-center]
+(defn is-inside 
+  "true if me is closer to center than opp"
+  [me opp x-center y-center]
   (let [x-me (get me "x")
         y-me (get me "y")
         x-opp (get opp "x")
@@ -48,20 +70,26 @@
     (< dist-me dist-opp)))
       
 
-(defn find-mass-diff [me opp]
+(defn find-mass-diff 
+  "difference in mass between me and opp"
+  [me opp]
   (let [my-mass (get me "mass")
        opp-mass (get opp "mass")]
     (- my-mass opp-mass)))
 
-(defn get-th [q th] 
+(defn get-th 
   "A wrapper to log before returning the final theta value"
+  [q th] 
   th)
 
-(defn fast-move-to-goal [th-goal th-delta]
+(defn fast-move-to-goal 
+  "change the move target based on some delta"
+  [th-goal th-delta]
   (debug "using fast fn")
   (+ th-goal th-delta))
 
 (defn compute-acceleration-theta [a-max th-current th-goal]
+  "decide how to accelerate such that the new velocity direction is close the th-goal"
   (let [th-delta (- th-goal th-current)
         pi-over-2 (/ Math/PI 2)]
     (debug "th-delta: " th-delta ", th-goal: " th-goal ", th-current: " th-current)
@@ -73,7 +101,9 @@
   (debug "red zone occupied")
   :red)
 
-(defn compute-zone [obj settings]
+(defn compute-zone
+  "decide which zone `obj` resides in (`:red`, `:yellow`, `:green`)" 
+  [obj settings]
   (let [x-obj (get obj "x")
         y-obj (get obj "y")
         x-center (/ (get settings "maxWidth") 2)
@@ -85,7 +115,9 @@
       (> dist-obj (* radius 0.7)) :yellow
       (> dist-obj 0) :green)))
 
-(defn angle-between-points [x1 y1 x2 y2]
+(defn angle-between-points 
+  "compute the angle between the points (x1,y1) and (x2,y2) in the range of 0 to 2pi"
+  [x1 y1 x2 y2]
   (let [dx (- x2 x1)
         dy (- y2 y1)
         th (Math/atan2 dy dx)
@@ -97,7 +129,9 @@
       (and (> th (- 0 Math/PI)) (<= th (- 0 pi-over-2))) (get-th "q3" (+ th two-pi))
       (and (> th (- 0 pi-over-2)) (<= th 0)) (get-th "q4" (+ th two-pi)))))
 
-(defn center-ai [me all settings]
+(defn center-ai 
+  "ai who will always aim towards the center of the board"
+  [me all settings]
   (let [max-acc (get me "maxAcc")
         v-current (get me "v")
         v-th-current (get v-current "th")
@@ -108,7 +142,9 @@
         th-center (angle-between-points x-me y-me x-center y-center)]
     (gen-response max-acc (compute-acceleration-theta max-acc v-th-current th-center))))
 
-(defn powerup-ai [me all settings]
+(defn powerup-ai 
+  "ai who will aim for the powerup nearest the center of the board"
+  [me all settings]
   (let [max-acc (get me "maxAcc")
         x-center (/ (get settings "maxWidth") 2) 
         y-center (/ (get settings "maxHeight") 2)
@@ -122,7 +158,9 @@
         th-goal (angle-between-points x-me y-me x-goal y-goal)]
     (gen-response max-acc (compute-acceleration-theta max-acc v-th-current th-goal))))
 
-(defn aggressive-ai [me all settings]
+(defn aggressive-ai 
+  "ai who will always aim towards the opponent" 
+  [me all settings]
   (let [max-acc (get me "maxAcc")
         x-center (/ (get settings "maxWidth") 2) 
         y-center (/ (get settings "maxHeight") 2)
@@ -137,22 +175,32 @@
     (gen-response max-acc (compute-acceleration-theta max-acc v-th-current th-goal))))
 
 (defn aggressive-ai-when-hes-on-the-ropes [me all settings]
-  (info "choosing aggressive-ai because we have them on the ropes")
+  (debug "choosing aggressive-ai because we have them on the ropes")
   (aggressive-ai me all settings))
 
 (defn center-ai-when-in-yellow-zone [me all settings]
-  (info "choosing center-ai due to yellow or red zone infraction while outside of opponent")
+  (debug "choosing center-ai due to yellow or red zone infraction while outside of opponent")
   (center-ai me all settings))
 
 (defn center-ai-when-behind-in-power [me all settings]
-  (info "choosing center-ai due to power difference")
+  (debug "choosing center-ai due to power difference")
   (center-ai me all settings))
 
 (defn powerup-ai-when-in-range [me all settings]
-  (info "choosing powerup-ai since there is one in range")
+  (debug "choosing powerup-ai since there is one in range")
   (powerup-ai me all settings))
 
-(defn choose-ai [me all settings]
+(defn choose-ai 
+  "decide which mode to operate in based on the following logic:
+   * if the opponent is outside of us in the yellow zone be aggressive
+   * if a powerup is on the battlefield and that powerup is not in the
+     red zone: go after it unless we have a lead greater than 1.0 in mass
+     unless both players are in the green zone (meant to counteract center
+     holding AIs)
+   * if we are on the outsize and not in the green zone make a b-line for
+     the center
+   * otherwise be aggressive"
+  [me all settings]
   (let [max-acc (get me "maxAcc")
         x-center (/ (get settings "maxWidth") 2) 
         y-center (/ (get settings "maxHeight") 2)
@@ -170,7 +218,10 @@
       (and (not (= :green zone-me)) (not me-inside)) (center-ai-when-in-yellow-zone me all settings)
       (and) (aggressive-ai me all settings))))
 
-(defn ai-response [ai params]
+(defn ai-response 
+  "wrapper around calling an AI with the web request params to get
+   the common values out of the map"
+  [ai params]
   (let [me (get params "me")
         all (get params "all")
         settings (get params "settings")]
@@ -179,9 +230,16 @@
 (defroutes handler
   (POST "/" {params :params}
     (json-response 
-      (ai-response choose-ai params))))
+      (ai-response choose-ai params)))
+  (ANY "/" {params :params}
+    (json-response
+      (gen-response 0 0))))
 
-(def app
+(defn app
+  []
   (-> handler
     (wrap-reload '(discwar.ai))
     (wrap-json-params)))
+
+(defn -main [& args]
+  (run-jetty (app) {:port 9090}))
